@@ -29,7 +29,8 @@ describe('Cache', () => {
       account: 'zeit',
       repository: 'hyper',
       token: process.env.TOKEN,
-      url: process.env.URL
+      url: process.env.URL,
+      release_channels: ['stable']
     }
 
     new Cache(config)
@@ -40,14 +41,15 @@ describe('Cache', () => {
       account: 'zeit',
       repository: 'hyper',
       token: process.env.TOKEN,
-      url: process.env.URL
+      url: process.env.URL,
+      release_channels: ['stable']
     }
 
     const cache = new Cache(config)
-    const storage = await cache.loadCache()
-
-    expect(typeof storage.version).toBe('string')
-    expect(typeof storage.platforms).toBe('object')
+    const releaseChannels = await cache.loadCache()
+    const stable = releaseChannels['stable']
+    expect(typeof stable.version).toBe('string')
+    expect(typeof stable.platforms).toBe('object')
   })
 
   it('should set platforms correctly', async () => {
@@ -59,8 +61,8 @@ describe('Cache', () => {
     }
 
     const cache = new Cache(config)
-    const storage = await cache.loadCache()
+    const releaseChannels = await cache.loadCache()
 
-    console.log(storage.platforms.darwin)
+    console.log(releaseChannels.stable.platforms.darwin)
   })
 })

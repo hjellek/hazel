@@ -1,15 +1,9 @@
-// Native
 import * as urlHelpers from 'url'
 import { IncomingMessage, ServerResponse } from 'http'
-
-// Packages
 import { send } from 'micro'
 import { valid, compare } from 'semver'
 import { parse } from 'express-useragent'
-import fetch from 'node-fetch'
 import distanceInWordsToNow from 'date-fns/distance_in_words_to_now'
-
-// Utilities
 import checkAlias from './aliases'
 import prepareView from './view'
 import Cache, { CacheConfig, PlatformInfo } from './cache'
@@ -79,7 +73,7 @@ export default function createRoutes({
     }
 
     // Get the latest version from the cache
-    const { platforms } = await loadCache()
+    const { platforms } = (await loadCache())['stable']
 
     if (!platform || !platforms || !platforms[platform]) {
       send(res, 404, 'No download available for your platform!')
@@ -106,6 +100,8 @@ export default function createRoutes({
     const isUpdate = params && params.update
 
     let platform = req.params && req.params.platform
+    const release_channel =
+      (req.params && req.params.release_channel) || 'stable'
 
     if (!platform) {
       send(res, 500, 'Platform parameter is missing')
@@ -131,18 +127,20 @@ export default function createRoutes({
       return
     }
 
-    if (!latest.platforms || !latest.platforms[resolvedPlatform]) {
+    const release = latest[release_channel]
+
+    if (!release.platforms || !release.platforms[resolvedPlatform]) {
       send(res, 404, 'No download available for your platform')
       return
     }
 
     if (token && typeof token === 'string' && token.length > 0) {
-      proxyPrivateDownload(latest.platforms[resolvedPlatform], req, res)
+      proxyPrivateDownload(release.platforms[resolvedPlatform], req, res)
       return
     }
 
     res.writeHead(302, {
-      Location: latest.platforms[resolvedPlatform].url
+      Location: release.platforms[resolvedPlatform].url
     })
 
     res.end()
@@ -154,6 +152,8 @@ export default function createRoutes({
   ): Promise<void> => {
     const platformName = req.params && req.params.platform
     const version = req.params && req.params.version
+    const release_channel =
+      (req.params && req.params.release_channel) || 'stable'
 
     if (!platformName || !version) {
       send(res, 500, 'Platform and version parameters are required')
@@ -181,7 +181,7 @@ export default function createRoutes({
     }
 
     // Get the latest version from the cache
-    const latest = await loadCache()
+    const latest = (await loadCache())[release_channel]
 
     if (!latest.platforms || !latest.platforms[platform]) {
       res.statusCode = 204
@@ -224,7 +224,7 @@ export default function createRoutes({
     res: ServerResponse
   ): Promise<void> => {
     // Get the latest version from the cache
-    const latest = await loadCache()
+    const latest = (await loadCache())['stable']
 
     if (!latest.files || !latest.files.RELEASES) {
       res.statusCode = 204
@@ -247,7 +247,7 @@ export default function createRoutes({
     req: RouteRequest,
     res: ServerResponse
   ): Promise<void> => {
-    const latest = await loadCache()
+    const latest = (await loadCache())['stable']
 
     try {
       const render = await prepareView()

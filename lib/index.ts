@@ -12,7 +12,7 @@ export default function createServer(config: CacheConfig): RequestHandler {
 
   try {
     cache = new Cache(config)
-  } catch (err) {
+  } catch (err: any) {
     const { code, message } = err
 
     if (code) {
@@ -40,6 +40,7 @@ export default function createServer(config: CacheConfig): RequestHandler {
   router.get('/download', routes.download)
   router.get('/download/:platform', routes.downloadPlatform)
   router.get('/update/:platform/:version', routes.update)
+  router.get('/update/:platform/:version/:release_channel', routes.update)
   router.get('/update/win32/:version/RELEASES', routes.releases)
 
   return (req: IncomingMessage, res: ServerResponse) => {

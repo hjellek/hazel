@@ -1,11 +1,10 @@
-// Packages
 import fetch from 'node-fetch'
 import retry from 'async-retry'
 import convertStream from 'stream-to-string'
 import ms from 'ms'
-
-// Utilities
 import checkPlatform from './platform'
+
+export type ReleaseChannels = { [key: string]: CacheData}
 
 export interface CacheConfig {
   account: string
@@ -13,7 +12,7 @@ export interface CacheConfig {
   token?: string
   url?: string
   interval?: number
-  pre?: string
+  release_channels?: string[]
 }
 
 export interface PlatformInfo {
@@ -34,7 +33,7 @@ export interface CacheData {
 
 export default class Cache {
   private config: CacheConfig
-  private latest: Partial<CacheData>
+  private latest: { [key: string]: Partial<CacheData> | undefined }
   private lastUpdate: number | null
 
   constructor(config: CacheConfig) {
@@ -108,7 +107,7 @@ export default class Cache {
   }
 
   async refreshCache(): Promise<void> {
-    const { account, repository, pre, token } = this.config
+    const { account, repository, release_channels = ['stable'], token } = this.config
     const repo = account + '/' + repository
     const url = `https://api.github.com/repos/${repo}/releases?per_page=100`
     const headers: { [key: string]: string } = {
@@ -140,65 +139,79 @@ export default class Cache {
       return
     }
 
-    const release = data.find((item: any) => {
-      const isPre = Boolean(pre) === Boolean(item.prerelease)
-      return !item.draft && isPre
+    const releases: {[key: string]: any } = {}
+    release_channels.forEach((channel) => {
+      releases[channel] = data.find((item: any) => {
+        if (item.draft) {
+          return;
+        }
+        if (channel === 'stable' && item.prerelease) {
+          return;
+        }
+        const release_channel = this.getReleaseChannelFromTagName(item.tag_name)
+        return release_channel === channel
+      })
     })
 
-    if (!release || !release.assets || !Array.isArray(release.assets)) {
-      return
-    }
+    for (const [channel, release] of Object.entries(releases)) {
+      if (!release || !release.assets || !Array.isArray(release.assets)) {
+        return
+      }
+      const channelRelease: Partial<CacheData> = {};
 
-    const { tag_name } = release
+      const {tag_name} = release
 
-    if (this.latest.version === tag_name) {
-      console.log('Cached version is the same as latest')
-      this.lastUpdate = Date.now()
-      return
-    }
+      if (this.latest[channel]?.version === tag_name) {
+        console.log(`Cached version for ${channel} is the same as latest`)
+        this.lastUpdate = Date.now()
+        return
+      }
 
-    console.log(`Caching version ${tag_name}...`)
+      console.log(`Caching version ${tag_name}...`)
 
-    this.latest.version = tag_name
-    this.latest.notes = release.body
-    this.latest.pub_date = release.published_at
+      channelRelease.version = tag_name
+      channelRelease.notes = release.body
+      channelRelease.pub_date = release.published_at
 
-    // Clear list of download links
-    this.latest.platforms = {}
+      // Clear list of download links
+      channelRelease.platforms = {}
 
-    for (const asset of release.assets) {
-      const { name, browser_download_url, url, content_type, size } = asset
+      for (const asset of release.assets) {
+        const {name, browser_download_url, url, content_type, size} = asset
 
-      if (name === 'RELEASES') {
-        try {
-          if (!this.latest.files) {
-            this.latest.files = {}
+        if (name === 'RELEASES') {
+          try {
+            if (!channelRelease.files) {
+              channelRelease.files = {}
+            }
+            channelRelease.files.RELEASES = await this.cacheReleaseList(
+              browser_download_url
+            )
+          } catch (err) {
+            console.error(err)
           }
-          this.latest.files.RELEASES = await this.cacheReleaseList(
-            browser_download_url
-          )
-        } catch (err) {
-          console.error(err)
+          continue
         }
-        continue
+
+        const platform = checkPlatform(name)
+
+        if (!platform) {
+          continue
+        }
+
+        channelRelease.platforms[platform] = {
+          name,
+          api_url: url,
+          url: browser_download_url,
+          content_type,
+          size: Math.round(size / 1000000 * 10) / 10
+        }
+        this.latest[channel] = channelRelease
       }
 
-      const platform = checkPlatform(name)
-
-      if (!platform) {
-        continue
-      }
-
-      this.latest.platforms[platform] = {
-        name,
-        api_url: url,
-        url: browser_download_url,
-        content_type,
-        size: Math.round(size / 1000000 * 10) / 10
-      }
+      console.log(`Finished caching version ${tag_name} for release_channel ${channel}`)
     }
 
-    console.log(`Finished caching version ${tag_name}`)
     this.lastUpdate = Date.now()
   }
 
@@ -216,13 +229,25 @@ export default class Cache {
   // This is a method returning the cache
   // because the cache would otherwise be loaded
   // only once when the index file is parsed
-  async loadCache(): Promise<CacheData> {
+  async loadCache(): Promise<ReleaseChannels> {
     const { latest, refreshCache, isOutdated, lastUpdate } = this
 
     if (!lastUpdate || isOutdated()) {
       await refreshCache()
     }
 
-    return Object.assign({}, latest) as CacheData
+    return Object.assign({}, latest) as ReleaseChannels
+  }
+
+  private getReleaseChannelFromTagName(tag: string) {
+    const matches = tag.match(/([\w-])?.*/)
+    const tag_prefix = matches ? matches[1] : 'v'
+    if (tag_prefix.endsWith('-')) {
+      tag_prefix.slice(0, -1)
+    }
+
+    const release_channel = tag_prefix === 'v' ? 'stable' : tag_prefix
+
+    return release_channel
   }
 }
