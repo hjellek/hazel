@@ -1,27 +1,51 @@
 // Native
-const urlHelpers = require('url');
+import * as urlHelpers from 'url'
+import { IncomingMessage, ServerResponse } from 'http'
 
 // Packages
-const { send } = require('micro')
-const { valid, compare } = require('semver')
-const { parse } = require('express-useragent')
-const fetch = require('node-fetch')
-const distanceInWordsToNow = require('date-fns/distance_in_words_to_now')
+import { send } from 'micro'
+import { valid, compare } from 'semver'
+import { parse } from 'express-useragent'
+import fetch from 'node-fetch'
+import distanceInWordsToNow from 'date-fns/distance_in_words_to_now'
 
 // Utilities
-const checkAlias = require('./aliases')
-const prepareView = require('./view')
+import checkAlias from './aliases'
+import prepareView from './view'
+import Cache, { CacheConfig, PlatformInfo } from './cache'
 
-module.exports = ({ cache, config }) => {
+interface RouteRequest extends IncomingMessage {
+  params?: { [key: string]: string }
+}
+
+interface RouteHandlers {
+  download: (req: RouteRequest, res: ServerResponse) => Promise<void>
+  downloadPlatform: (req: RouteRequest, res: ServerResponse) => Promise<void>
+  update: (req: RouteRequest, res: ServerResponse) => Promise<void>
+  releases: (req: RouteRequest, res: ServerResponse) => Promise<void>
+  overview: (req: RouteRequest, res: ServerResponse) => Promise<void>
+}
+
+export default function createRoutes({
+  cache,
+  config
+}: {
+  cache: Cache
+  config: CacheConfig
+}): RouteHandlers {
   const { loadCache } = cache
-  const exports = {}
+  const exports: RouteHandlers = {} as RouteHandlers
   const { token, url } = config
   const shouldProxyPrivateDownload =
     token && typeof token === 'string' && token.length > 0
 
   // Helpers
-  const proxyPrivateDownload = (asset, req, res) => {
-    const redirect = 'manual'
+  const proxyPrivateDownload = (
+    asset: PlatformInfo,
+    req: RouteRequest,
+    res: ServerResponse
+  ): void => {
+    const redirect: 'manual' | 'follow' | 'error' = 'manual'
     const headers = { Accept: 'application/octet-stream' }
     const options = { headers, redirect }
     const { api_url: rawUrl } = asset
@@ -31,17 +55,20 @@ module.exports = ({ cache, config }) => {
     )
 
     fetch(finalUrl, options).then(assetRes => {
-      res.setHeader('Location', assetRes.headers.get('Location'))
+      res.setHeader('Location', assetRes.headers.get('Location') || '')
       send(res, 302)
     })
   }
 
-  exports.download = async (req, res) => {
-    const userAgent = parse(req.headers['user-agent'])
-    const params = urlHelpers.parse(req.url, true).query
+  exports.download = async (
+    req: RouteRequest,
+    res: ServerResponse
+  ): Promise<void> => {
+    const userAgent = parse(req.headers['user-agent'] || '')
+    const params = urlHelpers.parse(req.url || '', true).query
     const isUpdate = params && params.update
 
-    let platform
+    let platform: string | undefined
 
     if (userAgent.isMac && isUpdate) {
       platform = 'darwin'
@@ -71,11 +98,19 @@ module.exports = ({ cache, config }) => {
     res.end()
   }
 
-  exports.downloadPlatform = async (req, res) => {
-    const params = urlHelpers.parse(req.url, true).query
+  exports.downloadPlatform = async (
+    req: RouteRequest,
+    res: ServerResponse
+  ): Promise<void> => {
+    const params = urlHelpers.parse(req.url || '', true).query
     const isUpdate = params && params.update
 
-    let { platform } = req.params
+    let platform = req.params && req.params.platform
+
+    if (!platform) {
+      send(res, 500, 'Platform parameter is missing')
+      return
+    }
 
     if (platform === 'mac' && !isUpdate) {
       platform = 'dmg'
@@ -89,32 +124,41 @@ module.exports = ({ cache, config }) => {
     const latest = await loadCache()
 
     // Check platform for appropiate aliases
-    platform = checkAlias(platform)
+    const resolvedPlatform = checkAlias(platform)
 
-    if (!platform) {
+    if (!resolvedPlatform) {
       send(res, 500, 'The specified platform is not valid')
       return
     }
 
-    if (!latest.platforms || !latest.platforms[platform]) {
+    if (!latest.platforms || !latest.platforms[resolvedPlatform]) {
       send(res, 404, 'No download available for your platform')
       return
     }
 
     if (token && typeof token === 'string' && token.length > 0) {
-      proxyPrivateDownload(latest.platforms[platform], req, res)
+      proxyPrivateDownload(latest.platforms[resolvedPlatform], req, res)
       return
     }
 
     res.writeHead(302, {
-      Location: latest.platforms[platform].url
+      Location: latest.platforms[resolvedPlatform].url
     })
 
     res.end()
   }
 
-  exports.update = async (req, res) => {
-    const { platform: platformName, version } = req.params
+  exports.update = async (
+    req: RouteRequest,
+    res: ServerResponse
+  ): Promise<void> => {
+    const platformName = req.params && req.params.platform
+    const version = req.params && req.params.version
+
+    if (!platformName || !version) {
+      send(res, 500, 'Platform and version parameters are required')
+      return
+    }
 
     if (!valid(version)) {
       send(res, 500, {
@@ -175,7 +219,10 @@ module.exports = ({ cache, config }) => {
     res.end()
   }
 
-  exports.releases = async (req, res) => {
+  exports.releases = async (
+    req: RouteRequest,
+    res: ServerResponse
+  ): Promise<void> => {
     // Get the latest version from the cache
     const latest = await loadCache()
 
@@ -196,7 +243,10 @@ module.exports = ({ cache, config }) => {
     res.end(content)
   }
 
-  exports.overview = async (req, res) => {
+  exports.overview = async (
+    req: RouteRequest,
+    res: ServerResponse
+  ): Promise<void> => {
     const latest = await loadCache()
 
     try {

@@ -1,5 +1,5 @@
 /* global describe, it, expect */
-const aliases = require('../lib/aliases')
+import aliases from '../lib/aliases'
 
 describe('Aliases', () => {
   it('Should return the correct platform', () => {
