@@ -2,6 +2,7 @@ import fetch from 'node-fetch'
 import retry from 'async-retry'
 import convertStream from 'stream-to-string'
 import ms from 'ms'
+import { prerelease } from 'semver'
 import checkPlatform from './platform'
 
 export type ReleaseChannels = { [key: string]: CacheData}
@@ -240,14 +241,11 @@ export default class Cache {
   }
 
   private getReleaseChannelFromTagName(tag: string) {
-    const matches = tag.match(/([\w-])?.*/)
-    const tag_prefix = matches ? matches[1] : 'v'
-    if (tag_prefix.endsWith('-')) {
-      tag_prefix.slice(0, -1)
+    const prereleaseComponents = prerelease(tag)
+    if (!prereleaseComponents || prereleaseComponents.length === 0) {
+      return 'stable'
     }
 
-    const release_channel = tag_prefix === 'v' ? 'stable' : tag_prefix
-
-    return release_channel
+    return prereleaseComponents[0];
   }
 }
