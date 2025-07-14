@@ -38,7 +38,9 @@ export default function createServer(config: CacheConfig): RequestHandler {
   // Define a route for every relevant path
   router.get('/', routes.overview)
   router.get('/download', routes.download)
+  router.get('/download/:release_channel', routes.download)
   router.get('/download/:platform', routes.downloadPlatform)
+  router.get('/download/:platform/:release_channel', routes.downloadPlatform)
   router.get('/update/:platform/:version', routes.update)
   router.get('/update/:platform/:version/:release_channel', routes.update)
   router.get('/update/win32/:version/RELEASES', routes.releases)

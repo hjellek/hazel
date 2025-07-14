@@ -5,7 +5,7 @@ import { valid, compare } from 'semver'
 import { parse } from 'express-useragent'
 import distanceInWordsToNow from 'date-fns/distance_in_words_to_now'
 import checkAlias from './aliases'
-import prepareView from './view'
+import { renderOverview } from './reactView'
 import Cache, { CacheConfig, PlatformInfo } from './cache'
 
 interface RouteRequest extends IncomingMessage {
@@ -61,6 +61,8 @@ export default function createRoutes({
     const userAgent = parse(req.headers['user-agent'] || '')
     const params = urlHelpers.parse(req.url || '', true).query
     const isUpdate = params && params.update
+    const release_channel =
+      (req.params && req.params.release_channel) || 'stable'
 
     let platform: string | undefined
 
@@ -73,7 +75,7 @@ export default function createRoutes({
     }
 
     // Get the latest version from the cache
-    const { platforms } = (await loadCache())['stable']
+    const { platforms } = (await loadCache())[release_channel]
 
     if (!platform || !platforms || !platforms[platform]) {
       send(res, 404, 'No download available for your platform!')
@@ -247,30 +249,40 @@ export default function createRoutes({
     req: RouteRequest,
     res: ServerResponse
   ): Promise<void> => {
-    const latest = (await loadCache())['stable']
+    const cache = await loadCache()
 
     try {
-      const render = await prepareView()
+      const releaseChannels: { [channel: string]: any } = {}
+      
+      for (const [channel, data] of Object.entries(cache)) {
+        if (data && data.platforms) {
+          releaseChannels[channel] = {
+            date: distanceInWordsToNow(data.pub_date, { addSuffix: true }),
+            files: data.platforms,
+            version: data.version,
+            releaseNotes: `https://github.com/${config.account}/${
+              config.repository
+            }/releases/tag/${data.version}`
+          }
+        }
+      }
 
       const details = {
         account: config.account,
         repository: config.repository,
-        date: distanceInWordsToNow(latest.pub_date, { addSuffix: true }),
-        files: latest.platforms,
-        version: latest.version,
-        releaseNotes: `https://github.com/${config.account}/${
-          config.repository
-        }/releases/tag/${latest.version}`,
+        releaseChannels,
         allReleases: `https://github.com/${config.account}/${
           config.repository
         }/releases`,
         github: `https://github.com/${config.account}/${config.repository}`
       }
 
-      send(res, 200, render(details))
+      const html = await renderOverview(details)
+      res.setHeader('Content-Type', 'text/html')
+      send(res, 200, html)
     } catch (err) {
       console.error(err)
-      send(res, 500, 'Error reading overview file')
+      send(res, 500, 'Error rendering overview page')
     }
   }
 

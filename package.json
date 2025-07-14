@@ -46,7 +46,6 @@
   "lint-staged": {
     "*.{js,ts}": [
       "yarn test --findRelatedTests",
-      "prettier --single-quote --no-semi --write --no-editorconfig",
       "git add"
     ]
   },
@@ -56,10 +55,11 @@
     "express-useragent": "1.0.12",
     "fetch": "1.1.0",
     "finalhandler": "1.1.0",
-    "handlebars": "4.0.11",
     "micro": "9.3.3",
     "ms": "2.1.1",
     "node-fetch": "2.0.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "router": "1.3.2",
     "semver": "5.5.0",
     "stream-to-string": "1.1.0",
@@ -71,12 +71,13 @@
     "@types/express": "^5.0.3",
     "@types/express-useragent": "^1.0.5",
     "@types/finalhandler": "^1.2.4",
-    "@types/handlebars": "^4.0.40",
     "@types/jest": "^30.0.0",
     "@types/micro": "^7.3.7",
     "@types/ms": "^2.1.0",
     "@types/node": "^24.0.13",
     "@types/node-fetch": "^2.6.12",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
     "@types/semver": "^7.7.0",
     "@types/stream-to-string": "^1.1.0",
     "@types/test-listen": "^1.1.2",
