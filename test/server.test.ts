@@ -1,6 +1,5 @@
-/* global describe, it, afterEach */
-const micro = require('micro')
-const listen = require('test-listen')
+import micro from 'micro'
+import listen from 'test-listen'
 
 const initialEnv = Object.assign({}, process.env)
 
@@ -15,8 +14,8 @@ describe('Server', () => {
       REPOSITORY: 'hyper'
     }
 
-    const run = require('../lib/server')
-    const server = micro(run)
+    const run = await import('../lib/server')
+    const server = micro(run.default)
 
     await listen(server)
     server.close()

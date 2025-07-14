@@ -1,20 +1,49 @@
 // Packages
-const fetch = require('node-fetch')
-const retry = require('async-retry')
-const convertStream = require('stream-to-string')
-const ms = require('ms')
+import fetch from 'node-fetch'
+import retry from 'async-retry'
+import convertStream from 'stream-to-string'
+import ms from 'ms'
 
 // Utilities
-const checkPlatform = require('./platform')
+import checkPlatform from './platform'
 
-module.exports = class Cache {
-  constructor(config) {
+export interface CacheConfig {
+  account: string
+  repository: string
+  token?: string
+  url?: string
+  interval?: number
+  pre?: string
+}
+
+export interface PlatformInfo {
+  name: string
+  api_url: string
+  url: string
+  content_type: string
+  size: number
+}
+
+export interface CacheData {
+  version: string
+  notes: string
+  pub_date: string
+  platforms: { [platform: string]: PlatformInfo }
+  files?: { [fileName: string]: string }
+}
+
+export default class Cache {
+  private config: CacheConfig
+  private latest: Partial<CacheData>
+  private lastUpdate: number | null
+
+  constructor(config: CacheConfig) {
     const { account, repository, token, url } = config
     this.config = config
 
     if (!account || !repository) {
       const error = new Error('Neither ACCOUNT, nor REPOSITORY are defined')
-      error.code = 'missing_configuration_properties'
+      ;(error as any).code = 'missing_configuration_properties'
       throw error
     }
 
@@ -22,7 +51,7 @@ module.exports = class Cache {
       const error = new Error(
         'Neither VERCEL_URL, nor URL are defined, which are mandatory for private repo mode'
       )
-      error.code = 'missing_configuration_properties'
+      ;(error as any).code = 'missing_configuration_properties'
       throw error
     }
 
@@ -35,9 +64,11 @@ module.exports = class Cache {
     this.isOutdated = this.isOutdated.bind(this)
   }
 
-  async cacheReleaseList(url) {
+  async cacheReleaseList(url: string): Promise<string> {
     const { token } = this.config
-    const headers = { Accept: 'application/vnd.github.preview' }
+    const headers: { [key: string]: string } = {
+      Accept: 'application/vnd.github.preview'
+    }
 
     if (token && typeof token === 'string' && token.length > 0) {
       headers.Authorization = `token ${token}`
@@ -49,7 +80,9 @@ module.exports = class Cache {
 
         if (response.status !== 200) {
           throw new Error(
-            `Tried to cache RELEASES, but failed fetching ${url}, status ${status}`
+            `Tried to cache RELEASES, but failed fetching ${url}, status ${
+              response.status
+            }`
           )
         }
 
@@ -61,7 +94,7 @@ module.exports = class Cache {
     let content = await convertStream(body)
     const matches = content.match(/[^ ]*\.nupkg/gim)
 
-    if (matches.length === 0) {
+    if (!matches || matches.length === 0) {
       throw new Error(
         `Tried to cache RELEASES, but failed. RELEASES content doesn't contain nupkg`
       )
@@ -74,11 +107,13 @@ module.exports = class Cache {
     return content
   }
 
-  async refreshCache() {
+  async refreshCache(): Promise<void> {
     const { account, repository, pre, token } = this.config
     const repo = account + '/' + repository
     const url = `https://api.github.com/repos/${repo}/releases?per_page=100`
-    const headers = { Accept: 'application/vnd.github.preview' }
+    const headers: { [key: string]: string } = {
+      Accept: 'application/vnd.github.preview'
+    }
 
     if (token && typeof token === 'string' && token.length > 0) {
       headers.Authorization = `token ${token}`
@@ -105,7 +140,7 @@ module.exports = class Cache {
       return
     }
 
-    const release = data.find(item => {
+    const release = data.find((item: any) => {
       const isPre = Boolean(pre) === Boolean(item.prerelease)
       return !item.draft && isPre
     })
@@ -167,7 +202,7 @@ module.exports = class Cache {
     this.lastUpdate = Date.now()
   }
 
-  isOutdated() {
+  isOutdated(): boolean {
     const { lastUpdate, config } = this
     const { interval = 15 } = config
 
@@ -181,13 +216,13 @@ module.exports = class Cache {
   // This is a method returning the cache
   // because the cache would otherwise be loaded
   // only once when the index file is parsed
-  async loadCache() {
+  async loadCache(): Promise<CacheData> {
     const { latest, refreshCache, isOutdated, lastUpdate } = this
 
     if (!lastUpdate || isOutdated()) {
       await refreshCache()
     }
 
-    return Object.assign({}, latest)
+    return Object.assign({}, latest) as CacheData
   }
 }

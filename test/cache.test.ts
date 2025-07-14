@@ -1,18 +1,18 @@
 /* eslint-disable no-new */
 /* global describe, it, expect */
-const Cache = require('../lib/cache')
+import Cache from '../lib/cache'
 
 describe('Cache', () => {
   it('should throw when account is not defined', () => {
     expect(() => {
-      const config = { repository: 'hyper' }
+      const config = { repository: 'hyper', account: '' }
       new Cache(config)
     }).toThrow(/ACCOUNT/)
   })
 
   it('should throw when repository is not defined', () => {
     expect(() => {
-      const config = { account: 'zeit' }
+      const config = { account: 'zeit', repository: '' }
       new Cache(config)
     }).toThrow(/REPOSITORY/)
   })

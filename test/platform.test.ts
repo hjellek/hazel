@@ -1,5 +1,5 @@
 /* global describe, it, expect */
-const platform = require('../lib/platform')
+import platform from '../lib/platform'
 
 describe('Platform', () => {
   it('Should parse mac', () => {
