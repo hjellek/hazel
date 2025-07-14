@@ -61,6 +61,8 @@ export default function createRoutes({
     const userAgent = parse(req.headers['user-agent'] || '')
     const params = urlHelpers.parse(req.url || '', true).query
     const isUpdate = params && params.update
+    const release_channel =
+      (req.params && req.params.release_channel) || 'stable'
 
     let platform: string | undefined
 
@@ -73,7 +75,7 @@ export default function createRoutes({
     }
 
     // Get the latest version from the cache
-    const { platforms } = (await loadCache())['stable']
+    const { platforms } = (await loadCache())[release_channel]
 
     if (!platform || !platforms || !platforms[platform]) {
       send(res, 404, 'No download available for your platform!')
